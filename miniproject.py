@@ -1,193 +1,226 @@
 import logging
-"""
-logging dùng để lưu lại hđ ghi làm vc vs file 
-
-    logging.DEBUG
-    logging.INFO / CHUONG TRINH HD BT
-    logging.WARNING / CHUONG TRINH CANH BAO NHUNG VAN CHAY
-    logging.ERROR / CHUONG TRINH BAO LOI 
-    logging.CRITICAL / LOI CUC KI NGHIEM TRONG
-
-CAC EXCEPTION HAY GẶP:
-    valueerror: gia tri sai kieu  mong doi
-    keyerror: truy cap key k ton tai
-    indexerror: vuot chi so index
-    zerodivisionerror: chia cho 0
-    typeerror: sai kieu dl
-    findnotfounderror: k ton tai file
-    attributeerror: goi pthuc k ton tai
-    
-"""
 
 logging.basicConfig(
-    filename="arena_tickets.log",   #Ghi log vào file:
-    level=logging.INFO,             # Chỉ ghi từ mức INFO trở lên.
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
 )
-ticket_db = [
-    {"ticket_id": "T01", "buyer_name": "Nguyen Van A", "price": 500.0, "status": "Booked", "seat": ("A", 1)},
-    {"ticket_id": "T02", "buyer_name": "Tran Thi B", "price": 300.0, "status": "Cancelled", "seat": ("B", 5)},
-    {"ticket_id": "T03", "buyer_name": "Le Van C", "price": 500.0, "status": "Booked", "seat": ("A", 2)}
+
+logger = logging.getLogger(__name__)
+
+ERR_E01 = "[Lỗi] (ERR-E01): Mã thiết bị này không tồn tại trong danh sách hệ thống!"
+ERR_E02 = "[Lỗi] (ERR-E02): Số liệu lỗi! Chỉ số mới không được nhỏ hơn chỉ số cũ!"
+ERR_E03 = "[Lỗi] (ERR-E03): Định dạng không hợp lệ! Chỉ số điện phải là số lớn hơn hoặc bằng 0!"
+ERR_E04 = "[Lỗi] (ERR-E04): Thao tác bị hủy! Thiết bị này đã được kích hoạt trạng thái OVERLOAD từ trước!"
+ERR_E05 = "[Lỗi] (ERR-E05): Lựa chọn sai! Vui lòng nhập đúng số thứ tự chức năng từ 1 đến 5!"
+
+SAMPLE_DEVICES = [
+    {
+        "id": "M01",
+        "location": "Mechanical Shop A",
+        "old_index": 1000,
+        "new_index": 7000,
+        "status": "Normal"
+    },
+    {
+        "id": "M02",
+        "location": "Assembly Line B",
+        "old_index": 2500,
+        "new_index": 5500,
+        "status": "Normal"
+    },
+    {
+        "id": "M03",
+        "location": "Packaging Area",
+        "old_index": 1200,
+        "new_index": 8200,
+        "status": "Normal"
+    }
 ]
 
-def display_tickets(tickets):
-    if len(tickets)==0:
-        print("k co ve nao trong danh sach")
+
+def find_device_by_id(devices_list, device_id):
+    for device in devices_list:
+        if device["id"] == device_id:
+            return device
+    return None
+
+
+def input_non_negative_number(message):
+    while True:
+        try:
+            value = float(input(message).strip())
+
+            if value < 0:
+                print(ERR_E03)
+                logger.error(ERR_E03)
+                continue
+
+            return value
+
+        except ValueError:
+            print(ERR_E03)
+            logger.error(ERR_E03)
+
+
+def show_menu():
+    print("""
+========================================
+SMART ENERGY MONITOR - PHÒNG CƠ ĐIỆN
+========================================
+1. Xem danh sách thiết bị giám sát
+2. Cập nhật chỉ số điện tiêu thụ
+3. Kích hoạt trạng thái cảnh báo quá tải
+4. Tính tổng lượng điện & Chi phí năng lượng
+5. Thoát chương trình
+""")
+
+
+def show_devices(devices_list):
+    logger.debug(f"Đang hiển thị danh sách {len(devices_list)} thiết bị")
+
+    if not devices_list:
+        print("Hệ thống hiện chưa có thiết bị giám sát nào!")
         return
-    print('DANH SACH VE:')
-    print("MA VE | TEN KHACH HANG | GIA VE | CHO NGOI | TRANG THAI: ")
-    for ticket in tickets:
-        try:
-            seat_0=f"{ticket["seat"][0]}-{ticket["seat"][1]}"
-            status=ticket["status"]
-            if status=="Cancelled":
-                status+=" [DA HUY] "
-            print(f"MA VE: {ticket["ticket_id"]}"
-                  f"TEN KHACH HANG: {ticket["buyer_name"]} "
-                  f"GIA VE: {ticket["price"]}"
-                  f"CHO NGOI: {seat_0}"
-                  f"TRANG THAI: {status}")
-        except KeyError as e:
-            print("LỖI VÉ ĐANG BỊ THIẾU DU LIEU, VUI LONG KTRA LAI.")
-            logging.error(e)
-    logging.info("User viewed ticket list")
+
+    print(f'{"MÃ THIẾT BỊ":<15}{"VỊ TRÍ PHÂN XƯỞNG":<30}{"CHỈ SỐ CŨ":>15}{"CHỈ SỐ MỚI":>15}{"TRẠNG THÁI":>15}')
+    print("-" * 90)
+
+    for device in devices_list:
+        print(f'{device["id"]:<15}{device["location"]:<30}{device["old_index"]:>15.2f}{device["new_index"]:>15.2f}{device["status"]:>15}')
 
 
-def book_ticket(tickets):
+def update_indices(devices_list):
+    logger.debug("Đang thực hiện cập nhật chỉ số điện")
 
-    ma_new=input("yeu cau nhap ma moi can them")
+    if not devices_list:
+        print("Hệ thống hiện chưa có thiết bị giám sát nào!")
+        return
 
-    for i in tickets:
-        if ma_new==i["ticket_id"]:
-            print(f"LOI MA VE {ma_new} DA TON TAI")
-            logging.warning(f"Duplicate ticket ID entered {ma_new}")
-            return
+    device_id = input("Nhập mã thiết bị cần cập nhật chỉ số: ").strip().upper()
+    device = find_device_by_id(devices_list, device_id)
 
-    new_name=input("MOI BAN NHAP TEN VE: ")
-    while True:
-        try:
-            price_ticket_new=input("YEU CAU NHAP GIA VE MOI")
-            if float(price_ticket_new)>0:
-                break
-            print("Giá vé phải lớn hơn 0. Vui lòng nhập lại.")
-        except ValueError :
-            print("Giá vé phải là số. Vui lòng nhập lại.")
-            logging.warning("Invalid price input while booking ticket")
+    if not device:
+        print(ERR_E01)
+        logger.error(ERR_E01)
+        return
 
-    area=input("NHAP KHU VUC MOI ").upper()
+    old_index = input_non_negative_number("Nhập chỉ số cũ: ")
 
     while True:
+        new_index = input_non_negative_number("Nhập chỉ số mới: ")
+
+        if new_index < old_index:
+            print(ERR_E02)
+            logger.error(ERR_E02)
+            continue
+
+        break
+
+    device["old_index"] = old_index
+    device["new_index"] = new_index
+
+    logger.info(f"[Thành công]: Đã check-in số liệu cho thiết bị {device_id}")
+    print(f"[Thành công]: Đã cập nhật chỉ số điện cho thiết bị {device_id}")
+
+
+def trigger_overload_alert(devices_list):
+    logger.debug("Đang kích hoạt trạng thái cảnh báo quá tải")
+
+    if not devices_list:
+        print("Hệ thống hiện chưa có thiết bị giám sát nào!")
+        return
+
+    device_id = input("Nhập mã thiết bị cần cập nhật trạng thái: ").strip().upper()
+    device = find_device_by_id(devices_list, device_id)
+
+    if not device:
+        print(ERR_E01)
+        logger.error(ERR_E01)
+        return
+
+    if device["status"] == "Overload":
+        print(ERR_E04)
+        logger.error(ERR_E04)
+        return
+
+    consumption = device["new_index"] - device["old_index"]
+
+    if consumption > 5000:
+        device["status"] = "Overload"
+
+        logger.warning(
+            f"[Cảnh báo]: Thiết bị {device_id} đã vượt ngưỡng tiêu thụ an toàn, chuyển sang OVERLOAD!"
+        )
+
+        print(f"[Thành công]: Thiết bị {device_id} đã được chuyển sang trạng thái OVERLOAD")
+    else:
+        print(f"Thiết bị {device_id} chưa vượt ngưỡng tiêu thụ an toàn.")
+
+
+def calculate_energy_financials(devices_list):
+    logger.debug(f"Đang tính toán chi phí năng lượng cho {len(devices_list)} thiết bị")
+
+    if not devices_list:
+        return 0.0, 0.0, 0.0
+
+    total_kwh = 0
+
+    for device in devices_list:
+        total_kwh += device["new_index"] - device["old_index"]
+
+    discount_percent = 3.0 if total_kwh >= 50000 else 0.0
+    total_cost = total_kwh * 3000
+    final_cost = total_cost * (100 - discount_percent) / 100
+
+    return total_kwh, discount_percent, final_cost
+
+
+def show_energy_financials(devices_list):
+    total_kwh, discount_percent, final_cost = calculate_energy_financials(devices_list)
+
+    print(f"""
+----- BÁO CÁO NĂNG LƯỢNG -----
+Tổng điện tiêu thụ: {total_kwh:,.2f} kWh
+Tỷ lệ chiết khấu: {discount_percent}%
+Tổng tiền sau chiết khấu: {final_cost:,.0f} VND
+""")
+
+
+def main():
+    devices_list = [device.copy() for device in SAMPLE_DEVICES]
+
+    while True:
+        show_menu()
+
         try:
-            seat_number=int(input("YEU CAU NHAP  Số ghế MOI: "))
-            break
+            choice = int(input("Mời chọn chức năng (1-5): "))
 
-        except ValueError :
-            print(" Số ghế.phải là số. Vui lòng nhập lại.")
-    tickets.append({
-        "ticket_id": ma_new,
-        "buyer_name": new_name,
-        "price": float(price_ticket_new),
-        "status": "Booked",
-        "seat": (area, seat_number)
-    })
+            match choice:
+                case 1:
+                    show_devices(devices_list)
 
-    logging.info(f"Booked new ticket {ma_new} for {new_name}")
+                case 2:
+                    update_indices(devices_list)
 
-def change_seat(tickets):
-    ma_change=input("YEU CAU NHAP MA CAN THAY DOI: ")
-    flag=0
-    for i in tickets:
-        if ma_change == i["ticket_id"]:
-            flag=1
-            new_seat=input("Nhập khu vực ghế mới: ").upper()
-            while True:
-                try:
-                    number_new=int(input("Nhập số ghế mới:"))
+                case 3:
+                    trigger_overload_alert(devices_list)
+
+                case 4:
+                    show_energy_financials(devices_list)
+
+                case 5:
+                    print("Thoát chương trình thành công!")
                     break
-                except ValueError:
-                    print("Số ghế phải là số nguyên. Vui lòng nhập lại.")
-            i["seat"]=(new_seat,number_new)
-            print(f"Thành công: Đã đổi chỗ vé {ma_change} sang {new_seat}-{number_new}")
-            logging.info(f"Seat changed for ticket {ma_change} to {new_seat}-{number_new}")
-    if flag==0:
-        print(f"Không tìm thấy vé mang mã {ma_change}")
-        logging.warning(f" Change seat failed - Ticket {ma_change} not found")
 
-def cancel_ticket(tickets):
-    cancel_ticket=input("YEU CAU NHAP MA VE CAN HUY: ")
-    flag=0
-    for i in tickets:
-        if cancel_ticket==i["ticket_id"]:
-            flag=1
-            if i["status"] =="Cancelled":
-                print(f" Vé {cancel_ticket} đã ở trạng thái Cancelled trước đó.")
-            else:
-                i["status"] = "Cancelled"
-                print(f"Thành công: Vé {cancel_ticket}đã được hủy.")
-                logging.warning(f"Ticket {cancel_ticket} has been cancelled.")
-    if flag==0:
-        print(f"Không tìm thấy vé mang mã {cancel_ticket}")
-        logging.warning(f"Cancel ticket failed - Ticket {cancel_ticket}not found")
+                case _:
+                    print(ERR_E05)
+                    logger.error(ERR_E05)
 
-def calculate_total_revenue(ticket_list) -> float :
-    total=0.00
-    for ticket in ticket_list:
-        if ticket["status"] =="Booked":
-            total+= ticket["price"]
-            # o day neu dung get thi se loi vi get  tra ra None co the dung get("price",0) de gan gia tri mac dinh la 0
-    return total
+        except ValueError:
+            print(ERR_E05)
+            logger.error(ERR_E05)
 
 
-def calculate_revenue(tickets):
-    print("--- BÁO CÁO DOANH THU ---")
-    cancel=0
-    book=0
-    try:
-        for i in tickets:
-            if i["status"] == "Booked":
-                book+=1
-            elif i["status"] == "Cancelled":
-                cancel+=1
-        total=calculate_total_revenue(tickets)
-        print(f"Tổng số vé đã đặt: {book}")
-        print(f"Tổng số vé đã hủy: {cancel}")
-        print(f"Tổng doanh thu hợp lệ:{total}")
-        logging.info(f"Revenue report generated. Total: {total}")
-
-    except KeyError as e :
-        print("Lỗi: Một vé đang bị thiếu dữ liệu doanh thu.")
-        print(f"Tổng doanh thu hợp lệ: 0.00")
-        logging.error(f"- ERROR - Missing key while calculating revenue: {e}")
-
-
-
-
-
-
-
-
-if __name__== "__main__":
-    while True:
-        choose=input("""
-        === HỆ THỐNG QUẢN LÝ VÉ RIKKEI ESPORTS ===
-        1. Xem danh sách vé đã bán
-        2. Đặt vé mới
-        3. Đổi chỗ ngồi (Cập nhật vé)
-        4. Hủy vé
-        5. Báo cáo doanh thu
-        6. Thoát chương trình
-        NHAP LUA CHON TU 1->6
-        """)
-        match choose:
-            case "1":
-                display_tickets(ticket_db)
-            case "2":
-                book_ticket(ticket_db)
-            case "3":
-                change_seat(ticket_db)
-            case "4":
-                cancel_ticket(ticket_db)
-            case "5":
-                calculate_revenue(ticket_db)
-            case "6":
-                break
+if __name__ == "__main__":
+    main()
